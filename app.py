@@ -1,12 +1,13 @@
 import os
 from os.path import join, dirname
 from dotenv import load_dotenv
+
 from pymongo import MongoClient
 import jwt
-from datetime import datetime, timedelta
 import hashlib
 from flask import Flask, render_template, jsonify, request, redirect, url_for
 from werkzeug.utils import secure_filename
+from datetime import datetime, timedelta
 
 
 dotenv_path = join(dirname(__file__), '.env')
@@ -14,6 +15,8 @@ load_dotenv(dotenv_path)
 
 MONGODB_URI = os.environ.get("MONGODB_URI")
 DB_NAME =  os.environ.get("DB_NAME")
+SECRET_KEY =  os.environ.get("SECRET_KEY")
+algorithms =  os.environ.get("algorithms")
 
 client = MongoClient(MONGODB_URI)
 db = client[DB_NAME]
@@ -127,20 +130,25 @@ def sign_up():
 @app.route('/sign_up/check_dup', methods=['POST'])
 def check_dup():
     username_receive = request.form['username_give']
-    print = bool(user)
     exists = bool(db.users.find_one({"username": username_receive}))
     return jsonify({'result': 'success', 'exists': exists})
 
 @app.route("/update_profile", methods=["POST"])
-def save_img():
+def update_profile():
     token_receive = request.cookies.get("mytoken")
     try:
         payload = jwt.decode(token_receive, SECRET_KEY, algorithms=["HS256"])
         username = payload["id"]
         name_receive = request.form["name_give"]
         about_receive = request.form["about_give"]
-        new_doc = {"profile_name": name_receive, "profile_info": about_receive} 
-        new_post = {"profile_name": name_receive} 
+    
+        new_doc = {
+            "profile_name": name_receive, 
+            "profile_info": about_receive
+            }
+        new_posts = {
+            "profile_name": name_receive, 
+            }
         if "file_give" in request.files:
             file = request.files["file_give"]
             filename = secure_filename(file.filename)
@@ -149,11 +157,20 @@ def save_img():
             file.save("./static/" + file_path)
             new_doc["profile_pic"] = filename
             new_doc["profile_pic_real"] = file_path
-            new_post["profile_pic"] = filename
-            new_post["profile_pic_real"] = file_path
-        db.users.update_one({"username": payload["id"]}, {"$set": new_doc})
-        db.posts.update_many({"username": payload["id"]}, {"$set": new_post})
-        return jsonify({"result": "success", "msg": "Profile updated!"})
+            new_posts["profile_pic"] = filename
+            new_posts["profile_pic_real"] = file_path
+        db.users.update_one(
+            {"username": payload["id"]}, 
+            {"$set": new_doc}
+        )
+        db.posts.update_many(
+            {"username": payload["id"]}, 
+            {"$set": new_posts}
+        )
+        return jsonify({
+            "result": "success", 
+            "msg": "Your profile has been updated"
+        })
     except (jwt.ExpiredSignatureError, jwt.exceptions.DecodeError):
         return redirect(url_for("home"))
  
@@ -237,7 +254,6 @@ def update_like():
     token_receive = request.cookies.get("mytoken")
     try:
         payload = jwt.decode(token_receive, SECRET_KEY, algorithms=["HS256"])
-        # We should change the like count for the post here
         user_info = db.users.find_one({"username": payload["id"]})
         post_id_receive = request.form["post_id_give"]
         type_receive = request.form["type_give"]
@@ -260,20 +276,6 @@ def update_like():
 
 @app.route('/about', methods=['GET'])
 def about():
-    # token_receive = request.cookies.get(TOKEN_KEY)
-    # try:
-    #     payload = jwt.decode(
-    #         token_receive, 
-    #         SECRET_KEY, 
-    #         algorithms=["HS256"]
-    #     )
-    #     # Kita mengganti hitungan like suatu post disini
-    #     return jsonify({
-    #         "result": "success", 
-    #         "msg": "updated"
-    #         })
-    # except (jwt.ExpiredSignatureError, jwt.exceptions.DecodeError):
-    #     return redirect(url_for("home"))
     return render_template('about.html')
 
 @app.route('/secret', methods=['GET'])
